@@ -35,6 +35,7 @@ print_build_env() {
     printf "expat:      %s\n" "$(pkg_version expat)"
     printf "xml2:       %s\n" "$(pkg_version libxml-2.0)"
     printf "curl:       %s\n" "$(cmd_version 'curl --version' '^curl [0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}')"
+    printf "a2md:       %s\n" "$(cmd_version 'a2md --version' '[0-9]+\.[0-9]+\.[^ ]+')"
 }
 
 _svn_repo_base() {
