@@ -184,9 +184,12 @@ COMPAT
             --prefix="$INSTALL_DIR" \
             || exit 1
     fi
+else
+    # httpd's Makefiles don't track header dependencies, so a header change
+    # won't trigger a recompile of affected .c files. make clean forces it.
+    make clean || true
 fi
 
-make clean || true
 make -j"$(nproc)" || exit 1
 make install || exit 1
 
