@@ -134,8 +134,13 @@ cd "$SOURCE_DIR" || exit 1
 if [ "$FULL_BUILD" = "1" ]; then
     make distclean 2>/dev/null || true
     ./buildconf --with-apr=apr-1-config || exit 1
+    # The following logic is just a work around in order to build older versions of httpd
+    # using Fedora 44, a cleaner approach is to execute these steps in an containized env
+    # having the exact compatible versions of the OpenSSL and libxml, but that way would be 
+    # easy to execute one test again e.g. 2.4.49 and 2.4.67 using the same dev env.
+    # For the moment its helpful but its not recommended and it has its limitations.
     if [ "$IS_TAG" = "1" ] && version_lte "$BRANCH" "2.4.52"; then
-        # Old tags don't compile cleanly on modern Fedora (OpenSSL 3, libxml2 2.12).
+        # Old tags don't compile cleanly on modern Fedora 44 (OpenSSL 3, libxml2 2.12).
         # Inject a compat header via -include rather than patching the source tree.
         # ERR_GET_FUNC was dropped in OpenSSL 3; xmlstring.h needs an explicit include
         # in libxml2 2.12. Both are harmless stubs/includes for testing purposes.
