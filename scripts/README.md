@@ -39,16 +39,15 @@ pytest test/modules/http2
 
 Builds an httpd branch from SVN with debug symbols and installs it locally so you can run the Python test suite against it.
 
-```sh
-./prepare_pytest.sh trunk                               # build trunk
-./prepare_pytest.sh 2.4.x                               # build a branch
-./prepare_pytest.sh 2.4.68-rc1-candidate                # build a tag (cached after first run)
-./prepare_pytest.sh --force trunk                       # force rebuild
-./prepare_pytest.sh --test trunk --with-install 2.4.x   # run trunk tests against 2.4.x binary
-./prepare_pytest.sh --test-revision 1935579 trunk       # build trunk pinned at r1935579
-./prepare_pytest.sh --test trunk --with-install trunk --source-revision 1937392
-                                                         # latest trunk tests against trunk pinned at r1937392
-```
+| You want to... | Run |
+|---|---|
+| Build/update a branch to latest | `./prepare_pytest.sh trunk` |
+| Build a release tag (built once, then cached) | `./prepare_pytest.sh 2.4.68-rc1-candidate` |
+| Force a rebuild even if nothing changed | `./prepare_pytest.sh --force trunk` |
+| Run one branch's tests against another branch's already-built binary | `./prepare_pytest.sh --test trunk --with-install 2.4.x` |
+| Reproduce one exact revision (test suite + binary, same revision) | `./prepare_pytest.sh --test-revision 1935579 trunk` — then `cd` into `trunk-pinned` |
+| Keep working from your normal `trunk` checkout, but test against a binary pinned to one revision | `./prepare_pytest.sh --test trunk --with-install trunk --source-revision 1937392` — `trunk`'s own `config.ini` gets pointed at it, no `cd` needed |
+| Run an *old* test suite against a *separately pinned* binary (only when the two revisions differ) | `./prepare_pytest.sh --test trunk --with-install trunk --test-revision 1937352 --source-revision 1937392` |
 
 `--test-revision` and `--source-revision` each build into their own `<branch>-pinned` / `<branch>-install-pinned` scratch slot — the branch's normal checkout/install is never touched, and pinned builds are always rebuilt fully (no skip, no incremental).
 

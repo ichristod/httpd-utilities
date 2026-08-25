@@ -26,6 +26,8 @@ print_build_env() {
     uname -a
     gcc --version 2>/dev/null | head -1
     printf "openssl:    %s\n" "$(openssl version 2>/dev/null | awk '{print $2}')"
+    printf "apr:        %s\n" "$(apr-1-config --version 2>/dev/null)"
+    printf "apr-util:   %s\n" "$(apu-1-config --version 2>/dev/null)"
     printf "brotli:     %s\n" "$(cmd_version 'brotli --version' '[0-9]+\.[0-9]+\.[0-9]+')"
     printf "jansson:    %s\n" "$(pkg_version jansson)"
     printf "nghttp2:    %s\n" "$(pkg_version libnghttp2)"
