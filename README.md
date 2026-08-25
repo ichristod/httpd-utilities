@@ -18,3 +18,7 @@ See [scripts/README.md](scripts/README.md) for full documentation.
 ./scripts/prepare_pytest.sh trunk
 cd ~/opensource/httpd_svn/trunk && pytest test/modules
 ```
+
+## Credits
+
+Built with assistance from Claude, tested by ichristod.

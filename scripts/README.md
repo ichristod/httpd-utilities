@@ -2,6 +2,37 @@
 
 Helper scripts for building, testing, and debugging Apache httpd from source.
 
+## Layout
+
+| Path | Contents |
+|------|----------|
+| `~/opensource/httpd_svn/<branch>` | SVN source checkout — the test suite lives here too, under `test/modules/` |
+| `~/httpd_builds/<branch>` | that branch, configured/built/installed |
+| `~/opensource/httpd_svn/<branch>-pinned`, `~/httpd_builds/<branch>-pinned` | scratch checkout+install used by `--test-revision` |
+| `~/opensource/httpd_svn/<branch>-install-pinned`, `~/httpd_builds/<branch>-install-pinned` | scratch checkout+install used by `--source-revision` |
+
+One source checkout and one install per branch/tag name, normally in lockstep. The `-pinned` slots exist so pinning a revision never disturbs that lockstep pair — they're reused and fully rebuilt in place on every call, never accumulated. Both roots (`SVN_ROOT`, `BASE_BUILD_DIR`) are set at the top of `svn_branch.sh`.
+
+## Getting started
+
+On a machine with nothing checked out yet:
+
+```sh
+./scripts/prepare_pytest.sh trunk
+```
+
+That one command does everything: checks trunk out from the ASF SVN repo (no manual `svn checkout` needed), configures/builds/installs it, and generates `test/pyhttpd/config.ini` so pytest finds the install. Re-running it later just updates and rebuilds if the branch has moved on.
+
+The only thing it doesn't set up is the Python side — do that once per checkout:
+
+```sh
+cd ~/opensource/httpd_svn/trunk
+uv sync
+pytest test/modules/http2
+```
+
+(`uv sync` is skippable if you run tests through `pyhttpd/runtests.sh`, which does it for you on first run.)
+
 ---
 
 ## prepare_pytest.sh
@@ -14,14 +45,12 @@ Builds an httpd branch from SVN with debug symbols and installs it locally so yo
 ./prepare_pytest.sh 2.4.68-rc1-candidate                # build a tag (cached after first run)
 ./prepare_pytest.sh --force trunk                       # force rebuild
 ./prepare_pytest.sh --test trunk --with-install 2.4.x   # run trunk tests against 2.4.x binary
+./prepare_pytest.sh --test-revision 1935579 trunk       # build trunk pinned at r1935579
+./prepare_pytest.sh --test trunk --with-install trunk --source-revision 1937392
+                                                         # latest trunk tests against trunk pinned at r1937392
 ```
 
-After building:
-
-```sh
-cd ~/opensource/httpd_svn/trunk
-pytest test/modules/http2
-```
+`--test-revision` and `--source-revision` each build into their own `<branch>-pinned` / `<branch>-install-pinned` scratch slot — the branch's normal checkout/install is never touched, and pinned builds are always rebuilt fully (no skip, no incremental).
 
 Handles compat failures on modern Fedora (OpenSSL 3, libxml2 2.12, Lua 5.4) for old tags automatically.
 
