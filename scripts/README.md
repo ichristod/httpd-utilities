@@ -11,7 +11,7 @@ Helper scripts for building, testing, and debugging Apache httpd from source.
 | `~/opensource/httpd_svn/<branch>-pinned`, `~/httpd_builds/<branch>-pinned` | scratch checkout+install used by `--test-revision` |
 | `~/opensource/httpd_svn/<branch>-install-pinned`, `~/httpd_builds/<branch>-install-pinned` | scratch checkout+install used by `--source-revision` |
 
-One source checkout and one install per branch/tag name, normally in lockstep. The `-pinned` slots exist so pinning a revision never disturbs that lockstep pair — they're reused and fully rebuilt in place on every call, never accumulated. Both roots (`SVN_ROOT`, `BASE_BUILD_DIR`) are set at the top of `svn_branch.sh`.
+One source checkout and one install per branch/tag name, normally in lockstep. The `-pinned` slots exist so pinning a revision never disturbs that lockstep pair — they're reused and fully rebuilt in place on every call, never accumulated. Both roots default to `$HOME` as shown above; override either by exporting `SVN_ROOT` / `BASE_BUILD_DIR` before calling a script.
 
 ## Getting started
 

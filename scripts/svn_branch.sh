@@ -1,8 +1,9 @@
 #!/bin/sh
 # Shared helpers for the prepare_*.sh scripts. Source, don't run directly.
 
-SVN_ROOT="/home/devenv/opensource/httpd_svn"
-BASE_BUILD_DIR="/home/devenv/httpd_builds"
+# Override either by exporting it before calling a prepare_*.sh script.
+SVN_ROOT="${SVN_ROOT:-${HOME}/opensource/httpd_svn}"
+BASE_BUILD_DIR="${BASE_BUILD_DIR:-${HOME}/httpd_builds}"
 
 # returns 0 if $1 <= $2
 version_lte() {
