@@ -4,29 +4,40 @@ Helper scripts for building, testing, and debugging Apache httpd from source.
 
 ## Layout
 
-| Path | Contents |
-|------|----------|
-| `~/opensource/httpd_svn/<branch>` | SVN source checkout — the test suite lives here too, under `test/modules/` |
-| `~/httpd_builds/<branch>` | that branch, configured/built/installed |
-| `~/opensource/httpd_svn/<branch>-pinned`, `~/httpd_builds/<branch>-pinned` | scratch checkout+install used by `--test-revision` |
-| `~/opensource/httpd_svn/<branch>-install-pinned`, `~/httpd_builds/<branch>-install-pinned` | scratch checkout+install used by `--source-revision` |
+| SVN (default) | Git (`--git`) | Contents |
+|------|------|----------|
+| `~/opensource/httpd_svn/<branch>` | `~/opensource/httpd_git/<ref>/` | source — test suite lives under `test/modules/` |
+| | `~/opensource/httpd_git/.clone/` | shared git clone (managed automatically) |
+| `~/httpd_builds/<branch>` | `~/httpd_builds/<ref>/` | configured/built/installed |
+| `…/<branch>-pinned` | `…/<ref>-pinned` | scratch slot for `--test-revision` / `--test-ref` |
+| `…/<branch>-install-pinned` | `…/<ref>-install-pinned` | scratch slot for `--source-revision` / `--source-ref` |
 
-One source checkout and one install per branch/tag name, normally in lockstep. The `-pinned` slots exist so pinning a revision never disturbs that lockstep pair — they're reused and fully rebuilt in place on every call, never accumulated. Both roots default to `$HOME` as shown above; override either by exporting `SVN_ROOT` / `BASE_BUILD_DIR` before calling a script.
+One source checkout and one install per branch/tag name, normally in lockstep. The `-pinned` slots exist so pinning a revision never disturbs that lockstep pair — they're reused and fully rebuilt in place on every call, never accumulated.
+
+Override roots via env: `SVN_ROOT` / `GIT_ROOT` / `BASE_BUILD_DIR`. Git mode also accepts `GIT_REMOTE` (defaults to `https://github.com/apache/httpd.git`).
 
 ## Getting started
 
 On a machine with nothing checked out yet:
 
 ```sh
+# SVN (default)
 ./scripts/prepare_pytest.sh trunk
+
+# Git
+./scripts/prepare_pytest.sh --git main
 ```
 
-That one command does everything: checks trunk out from the ASF SVN repo (no manual `svn checkout` needed), configures/builds/installs it, and generates `test/pyhttpd/config.ini` so pytest finds the install. Re-running it later just updates and rebuilds if the branch has moved on.
+That one command does everything: checks out/clones the source (no manual `svn checkout` or `git clone` needed), configures/builds/installs it, and generates `test/pyhttpd/config.ini` so pytest finds the install. Re-running it later just updates and rebuilds if the branch has moved on.
 
 The only thing it doesn't set up is the Python side — do that once per checkout:
 
 ```sh
+# SVN
 cd ~/opensource/httpd_svn/trunk
+# Git
+cd ~/opensource/httpd_git/main
+
 uv sync
 pytest test/modules/http2
 ```
@@ -37,19 +48,18 @@ pytest test/modules/http2
 
 ## prepare_pytest.sh
 
-Builds an httpd branch from SVN with debug symbols and installs it locally so you can run the Python test suite against it.
+Builds an httpd branch from SVN or git with debug symbols and installs it locally so you can run the Python test suite against it. Pass `--git` to use git instead of SVN. `--test-ref` / `--source-ref` are aliases for `--test-revision` / `--source-revision` — in git mode these accept any git ref (branch, tag, or commit SHA).
 
-| You want to... | Run |
-|---|---|
-| Build/update a branch to latest | `./prepare_pytest.sh trunk` |
-| Build a release tag (built once, then cached) | `./prepare_pytest.sh 2.4.68-rc1-candidate` |
-| Force a rebuild even if nothing changed | `./prepare_pytest.sh --force trunk` |
-| Run one branch's tests against another branch's already-built binary | `./prepare_pytest.sh --test trunk --with-install 2.4.x` |
-| Reproduce one exact revision (test suite + binary, same revision) | `./prepare_pytest.sh --test-revision 1935579 trunk` — then `cd` into `trunk-pinned` |
-| Keep working from your normal `trunk` checkout, but test against a binary pinned to one revision | `./prepare_pytest.sh --test trunk --with-install trunk --source-revision 1937392` — `trunk`'s own `config.ini` gets pointed at it, no `cd` needed |
-| Run an *old* test suite against a *separately pinned* binary (only when the two revisions differ) | `./prepare_pytest.sh --test trunk --with-install trunk --test-revision 1937352 --source-revision 1937392` |
+| You want to... | SVN | Git |
+|---|---|---|
+| Build/update a branch to latest | `./prepare_pytest.sh trunk` | `./prepare_pytest.sh --git main` |
+| Build a release tag (built once, then cached) | `… 2.4.68-rc1-candidate` | `… --git 2.4.62` |
+| Force a rebuild even if nothing changed | `… --force trunk` | `… --git --force main` |
+| Run one branch's tests against another's binary | `… --test trunk --with-install 2.4.x` | `… --git --test main --with-install 2.4.x` |
+| Pin to an exact revision/commit | `… --test-revision 1935579 trunk` | `… --git --test-ref abc1234 main` |
+| Test against a separately pinned binary | `… --test trunk --with-install trunk --source-revision 1937392` | `… --git --test main --with-install main --source-ref 2.4.62` |
 
-`--test-revision` and `--source-revision` each build into their own `<branch>-pinned` / `<branch>-install-pinned` scratch slot — the branch's normal checkout/install is never touched, and pinned builds are always rebuilt fully (no skip, no incremental).
+Pinned builds (`--test-revision`/`--test-ref`, `--source-revision`/`--source-ref`) each use their own `-pinned` / `-install-pinned` scratch slot — the branch's normal checkout/install is never touched, and pinned builds are always rebuilt fully.
 
 Handles compat failures on modern Fedora (OpenSSL 3, libxml2 2.12, Lua 5.4) for old tags automatically.
 

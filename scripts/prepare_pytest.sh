@@ -1,9 +1,9 @@
 #!/bin/sh
-# Build and install an httpd SVN branch with debug symbols.
+# Build and install an httpd branch with debug symbols.
 # configure generates test/pyhttpd/config.ini pointing at the install prefix,
 # so pytest picks it up automatically.
 #
-# Usage:
+# Usage (SVN, default):
 #   ./prepare_pytest.sh trunk
 #   ./prepare_pytest.sh 2.4.x
 #   ./prepare_pytest.sh --force trunk
@@ -12,61 +12,68 @@
 #   ./prepare_pytest.sh --test trunk --with-install 2.4.x --test-revision 1935579
 #   ./prepare_pytest.sh --test trunk --with-install trunk --source-revision 1937392
 #   ./prepare_pytest.sh --test trunk --test-revision 1937352 --with-install trunk --source-revision 1937392
+#
+# Usage (git — pass --git before other flags):
+#   ./prepare_pytest.sh --git main
+#   ./prepare_pytest.sh --git 2.4.x
+#   ./prepare_pytest.sh --git 2.4.62
+#   ./prepare_pytest.sh --git --force main
+#   ./prepare_pytest.sh --git --test main --with-install 2.4.x
+#   ./prepare_pytest.sh --git --test-ref abc1234 main
+#   ./prepare_pytest.sh --git --test main --with-install main --source-ref 2.4.62
 
 FORCE=0
+USE_GIT=0
 BRANCH=""
 INSTALL_BRANCH=""
-TEST_REVISION=""
-SOURCE_REVISION=""
+TEST_REF=""
+SOURCE_REF=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --force)           FORCE=1; shift ;;
-        --test)             BRANCH="$2"; shift 2 ;;
-        --with-install)     INSTALL_BRANCH="$2"; shift 2 ;;
-        --test-revision)    TEST_REVISION="$2"; shift 2 ;;
-        --source-revision)  SOURCE_REVISION="$2"; shift 2 ;;
-        *)                  BRANCH="$1"; shift ;;
+        --git)                              USE_GIT=1; shift ;;
+        --force)                            FORCE=1; shift ;;
+        --test)                             BRANCH="$2"; shift 2 ;;
+        --with-install)                     INSTALL_BRANCH="$2"; shift 2 ;;
+        --test-revision|--test-ref)         TEST_REF="$2"; shift 2 ;;
+        --source-revision|--source-ref)     SOURCE_REF="$2"; shift 2 ;;
+        *)                                  BRANCH="$1"; shift ;;
     esac
 done
 
 if [ -z "$BRANCH" ]; then
     echo "Error: No branch or tag provided."
-    echo "Usage: $0 [--force] [--test-revision <rev>] <branch-or-tag>"
-    echo "       $0 --test <branch> --with-install <other> [--test-revision <rev>] [--source-revision <rev>]"
-    echo "       branch: trunk | 2.4.x"
-    echo "       tag:    2.4.68-rc1-candidate | ..."
+    echo ""
+    echo "Usage: $0 [--git] [--force] [--test-revision <rev>] <branch-or-tag>"
+    echo "       $0 [--git] --test <branch> --with-install <other> [--test-revision <rev>] [--source-revision <rev>]"
+    echo ""
+    echo "  SVN (default):  branch: trunk | 2.4.x     tag: 2.4.68-rc1-candidate | ..."
+    echo "  Git (--git):    branch: main | 2.4.x      tag: 2.4.62 | ...    ref: <commit-sha>"
+    echo ""
+    echo "  --git uses git worktrees instead of SVN checkouts."
+    echo "  --test-ref / --source-ref are aliases for --test-revision / --source-revision."
     exit 1
 fi
 
-if [ -n "$SOURCE_REVISION" ] && [ -z "$INSTALL_BRANCH" ]; then
-    echo "Error: --source-revision only applies together with --with-install."
+if [ -n "$SOURCE_REF" ] && [ -z "$INSTALL_BRANCH" ]; then
+    echo "Error: --source-revision/--source-ref only applies together with --with-install."
     exit 1
 fi
 
-. "$(dirname "$0")/svn_branch.sh"
+if [ "$USE_GIT" = "1" ]; then
+    . "$(dirname "$0")/git_branch.sh"
+else
+    . "$(dirname "$0")/svn_branch.sh"
+fi
 
 resolve_source_dir "$BRANCH"
 BRANCH_SOURCE_DIR="$SOURCE_DIR"
 BRANCH_IS_TAG="$IS_TAG"
 
-if [ -n "$TEST_REVISION" ] && [ "$BRANCH_IS_TAG" = "1" ]; then
-    echo "Error: --test-revision is not applicable to tag '${BRANCH}' (tags are already immutable)."
+if [ -n "$TEST_REF" ] && [ "$BRANCH_IS_TAG" = "1" ]; then
+    echo "Error: --test-revision/--test-ref is not applicable to tag '${BRANCH}' (tags are already immutable)."
     exit 1
 fi
-
-# checkout_or_switch <canonical_source_dir> <revision> <target_dir>
-checkout_or_switch() {
-    _canonical="$1"; _rev="$2"; _target="$3"
-    if [ -d "$_target" ]; then
-        echo "Switching $(basename "$_target") to r${_rev}..."
-        svn update -r "$_rev" "$_target" || exit 1
-    else
-        _url="$(svn info "$_canonical" | awk -F': ' '/^URL:/{print $2}')"
-        echo "Checking out $(basename "$_target") at r${_rev}..."
-        svn checkout -r "$_rev" "$_url" "$_target" || exit 1
-    fi
-}
 
 # do_build_install <source_dir> <install_dir> <branch_name> <is_tag> <full_build> <revision>
 do_build_install() {
@@ -163,33 +170,35 @@ COMPAT
 
 # --with-install: reconfigure the --test branch's source to point at a different install prefix.
 if [ -n "$INSTALL_BRANCH" ]; then
-    if [ -n "$SOURCE_REVISION" ]; then
+    if [ -n "$SOURCE_REF" ]; then
         resolve_source_dir "$INSTALL_BRANCH"
         if [ "$IS_TAG" = "1" ]; then
-            echo "Error: --source-revision is not applicable to tag '${INSTALL_BRANCH}' (tags are already immutable)."
+            echo "Error: --source-revision/--source-ref is not applicable to tag '${INSTALL_BRANCH}' (tags are already immutable)."
             exit 1
         fi
-        INSTALL_SOURCE_DIR="${SVN_ROOT}/${INSTALL_BRANCH}-install-pinned"
-        checkout_or_switch "$SOURCE_DIR" "$SOURCE_REVISION" "$INSTALL_SOURCE_DIR"
+        INSTALL_SOURCE_DIR="${VCS_SOURCE_ROOT}/${INSTALL_BRANCH}-install-pinned"
+        vcs_checkout_at_ref "$SOURCE_DIR" "$SOURCE_REF" "$INSTALL_SOURCE_DIR"
         INSTALL_DIR="${BASE_BUILD_DIR}/${INSTALL_BRANCH}-install-pinned"
         mkdir -p "$INSTALL_DIR" || exit 1
-        echo "Building ${INSTALL_BRANCH} at r${SOURCE_REVISION} into ${INSTALL_DIR}..."
-        do_build_install "$INSTALL_SOURCE_DIR" "$INSTALL_DIR" "$INSTALL_BRANCH" "$IS_TAG" 1 "$SOURCE_REVISION"
+        echo "Building ${INSTALL_BRANCH} at $(vcs_rev_label "$SOURCE_REF") into ${INSTALL_DIR}..."
+        do_build_install "$INSTALL_SOURCE_DIR" "$INSTALL_DIR" "$INSTALL_BRANCH" "$IS_TAG" 1 "$SOURCE_REF"
     else
         INSTALL_DIR="${BASE_BUILD_DIR}/${INSTALL_BRANCH}"
         if [ ! -f "${INSTALL_DIR}/bin/apachectl" ]; then
             echo "'${INSTALL_BRANCH}' is not installed yet. Building it first..."
-            "$0" "${INSTALL_BRANCH}" || exit 1
+            _git_flag=""
+            [ "$USE_GIT" = "1" ] && _git_flag="--git"
+            "$0" $_git_flag "${INSTALL_BRANCH}" || exit 1
         fi
     fi
 
-    if [ -n "$TEST_REVISION" ]; then
-        TEST_SOURCE_DIR="${SVN_ROOT}/${BRANCH}-pinned"
-        checkout_or_switch "$BRANCH_SOURCE_DIR" "$TEST_REVISION" "$TEST_SOURCE_DIR"
+    if [ -n "$TEST_REF" ]; then
+        TEST_SOURCE_DIR="${VCS_SOURCE_ROOT}/${BRANCH}-pinned"
+        vcs_checkout_at_ref "$BRANCH_SOURCE_DIR" "$TEST_REF" "$TEST_SOURCE_DIR"
     else
         TEST_SOURCE_DIR="$BRANCH_SOURCE_DIR"
-        echo "Updating ${BRANCH} from SVN..."
-        svn update "$TEST_SOURCE_DIR" || exit 1
+        echo "Updating ${BRANCH}..."
+        vcs_update "$TEST_SOURCE_DIR"
     fi
 
     echo "Reconfiguring ${BRANCH} source to use ${INSTALL_BRANCH} installation (${INSTALL_DIR})..."
@@ -232,14 +241,14 @@ if [ -n "$INSTALL_BRANCH" ]; then
     exit 0
 fi
 
-# --test-revision without --with-install: own install slot, always a full rebuild.
-if [ -n "$TEST_REVISION" ]; then
-    PINNED_SOURCE_DIR="${SVN_ROOT}/${BRANCH}-pinned"
-    checkout_or_switch "$BRANCH_SOURCE_DIR" "$TEST_REVISION" "$PINNED_SOURCE_DIR"
+# --test-revision/--test-ref without --with-install: own install slot, always a full rebuild.
+if [ -n "$TEST_REF" ]; then
+    PINNED_SOURCE_DIR="${VCS_SOURCE_ROOT}/${BRANCH}-pinned"
+    vcs_checkout_at_ref "$BRANCH_SOURCE_DIR" "$TEST_REF" "$PINNED_SOURCE_DIR"
     INSTALL_DIR="${BASE_BUILD_DIR}/${BRANCH}-pinned"
     mkdir -p "$INSTALL_DIR" || exit 1
-    CURRENT_REV="$(svn info "$PINNED_SOURCE_DIR" | awk '/^Revision:/{print $2}')"
-    echo "Pinned build of ${BRANCH} at r${CURRENT_REV}: forcing full rebuild."
+    CURRENT_REV="$(vcs_get_rev "$PINNED_SOURCE_DIR")"
+    echo "Pinned build of ${BRANCH} at $(vcs_rev_label "$CURRENT_REV"): forcing full rebuild."
     do_build_install "$PINNED_SOURCE_DIR" "$INSTALL_DIR" "$BRANCH" "$BRANCH_IS_TAG" 1 "$CURRENT_REV"
     echo ""
     echo "httpd (${BRANCH}) installed in ${INSTALL_DIR}"
@@ -265,33 +274,33 @@ FULL_BUILD=1
 if [ "$BRANCH_IS_TAG" = "1" ]; then
     # Tags are immutable: build once and never again
     if [ -f "$BUILT_REVISION_FILE" ]; then
-        echo "Tag '${BRANCH}' already built at r$(cat "$BUILT_REVISION_FILE"). Skipping build."
+        echo "Tag '${BRANCH}' already built at $(vcs_rev_label "$(cat "$BUILT_REVISION_FILE")"). Skipping build."
         echo ""
         echo "Run tests with:"
         echo "  cd ${BRANCH_SOURCE_DIR} && pytest test/modules"
         echo "  cd ${BRANCH_SOURCE_DIR} && pytest test/modules/http2"
         exit 0
     fi
-    CURRENT_REV="$(svn info "$BRANCH_SOURCE_DIR" | awk '/^Revision:/{print $2}')"
+    CURRENT_REV="$(vcs_get_rev "$BRANCH_SOURCE_DIR")"
 else
     # Branch: update then compare revisions
-    echo "Updating ${BRANCH} from SVN..."
-    svn update "$BRANCH_SOURCE_DIR" || exit 1
-    CURRENT_REV="$(svn info "$BRANCH_SOURCE_DIR" | awk '/^Revision:/{print $2}')"
+    echo "Updating ${BRANCH}..."
+    vcs_update "$BRANCH_SOURCE_DIR"
+    CURRENT_REV="$(vcs_get_rev "$BRANCH_SOURCE_DIR")"
     if [ -f "$BUILT_REVISION_FILE" ]; then
         LAST_BUILT_REV="$(cat "$BUILT_REVISION_FILE")"
         if [ "$CURRENT_REV" = "$LAST_BUILT_REV" ]; then
-            echo "Branch '${BRANCH}' unchanged at r${CURRENT_REV}. Skipping build."
+            echo "Branch '${BRANCH}' unchanged at $(vcs_rev_label "$CURRENT_REV"). Skipping build."
             echo ""
             echo "Run tests with:"
             echo "  cd ${BRANCH_SOURCE_DIR} && pytest test/modules"
             echo "  cd ${BRANCH_SOURCE_DIR} && pytest test/modules/http2"
             exit 0
         fi
-        echo "Branch updated from r${LAST_BUILT_REV} to r${CURRENT_REV}. Rebuilding..."
+        echo "Branch updated from $(vcs_rev_label "$LAST_BUILT_REV") to $(vcs_rev_label "$CURRENT_REV"). Rebuilding..."
         FULL_BUILD=0
     else
-        echo "No previous build found. Building r${CURRENT_REV}..."
+        echo "No previous build found. Building $(vcs_rev_label "$CURRENT_REV")..."
     fi
 fi
 
